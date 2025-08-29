@@ -61,6 +61,10 @@ function M.setup()
     )
   end
 
+  function M.toggle_floating_pane()
+    sys("zellij action toggle-floating-panes")
+  end,
+
 
   function M.close_pane()
     -- Save all open buffers in neovim and close zellij pane

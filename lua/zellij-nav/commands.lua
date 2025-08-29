@@ -49,6 +49,10 @@ function M.commands(nav)
     nargs = "*",  -- allow any number of arguments
 })
 
+  ucmd("ZellijToggleFloatingPane", function()
+    nav.toggle_floating_pane()
+  end, {})
+
   -- Autocommands
   acmd("VimEnter", {
     pattern = "*",
