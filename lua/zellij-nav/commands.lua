@@ -42,6 +42,13 @@ function M.commands(nav)
     nav.new_tab()
   end, {})
 
+  ucmd("ZellijNewPaneCMD", function(opts)
+    -- opts.fargs contains the arguments as a table
+    nav.new_pane_cmd(opts)
+  end, {
+    nargs = "*",  -- allow any number of arguments
+})
+
   -- Autocommands
   acmd("VimEnter", {
     pattern = "*",

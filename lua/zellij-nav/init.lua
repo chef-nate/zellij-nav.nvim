@@ -51,6 +51,17 @@ function M.setup()
     )
   end
 
+  function M.new_pane_cmd(opts)
+    local args = table.concat(opts.fargs, " ")
+    print("attempted to run cmd with args: " .. args)
+    M.unlock() -- Ensure we are in normal mode
+    sys(
+      "zellij action new-pane --close-on-exit "
+      .. args
+    )
+  end
+
+
   function M.close_pane()
     -- Save all open buffers in neovim and close zellij pane
     sys("zellij action switch-mode normal")
