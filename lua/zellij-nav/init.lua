@@ -63,7 +63,7 @@ function M.setup()
 
   function M.toggle_floating_pane()
     sys("zellij action toggle-floating-panes")
-  end,
+  end
 
 
   function M.close_pane()
