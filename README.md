@@ -43,7 +43,7 @@ Use the [lazy.nvim](https://github.com/folke/lazy.nvim) plugin manager to instal
 
 #### Pane Commands
 
-- `:ZellijNewPane` - Open a floating Zellij pane.
+- `:ZellijNewPane` - Open a floating Zellij pane. Optionally pass in arguments, e.g. ':ZellijNewPane --floating --close-on-exit -- htop'
 - `:ZellijClosePane` - Close current Zellij pane.
 - `:ZellijNewPaneSplit` - Open a Zellij pane below.
 - `:ZellijNewPaneVSplit` - Open a Zellij pane to the right.
