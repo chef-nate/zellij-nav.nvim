@@ -25,9 +25,9 @@ function M.commands(nav)
     nav.unlock()
   end, {})
 
-  ucmd("ZellijNewPane", function()
-    nav.new_pane()
-  end, {})
+  ucmd("ZellijNewPane", function(opts)
+    nav.new_pane(opts)
+  end, { nargs = "*" })
   ucmd("ZellijNewPaneSplit", function()
     nav.new_pane("down")
   end, {})
@@ -39,22 +39,13 @@ function M.commands(nav)
   end, {})
   ucmd("ZellijClosePane", function()
     nav.close_pane()
-  end, {})
+  end, {}) 
 
   ucmd("ZellijNewTab", function()
     nav.new_tab()
   end, {})
 
-  ucmd("ZellijNewPaneCMD", function(opts)
-    -- opts.fargs contains the arguments as a table
-    nav.new_pane_cmd(opts)
-  end, {
-    nargs = "*",  -- allow any number of arguments
-})
-
-  ucmd("ZellijToggleFloatingPane", function()
-    nav.toggle_floating_pane()
-  end, {})
+ 
 
   -- Autocommands
   acmd("VimEnter", {
