@@ -39,13 +39,11 @@ function M.commands(nav)
   end, {})
   ucmd("ZellijClosePane", function()
     nav.close_pane()
-  end, {}) 
+  end, {})
 
   ucmd("ZellijNewTab", function()
     nav.new_tab()
   end, {})
-
- 
 
   -- Autocommands
   acmd("VimEnter", {

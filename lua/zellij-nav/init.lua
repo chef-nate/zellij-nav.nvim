@@ -56,22 +56,25 @@ function M.setup()
 
     if #fargs == 0 then
       -- No args given, spawn floating pane with default shell
-      l_zellij_args = string.format("--close-on-exit --floating --cwd %s -- %s", vim.fn.getcwd(), vim.env.SHELL)
-    elseif #fargs == 1 and fargs[1]:sub(1, 2) ~= "--"  then
+      l_zellij_args =
+        string.format("--close-on-exit --floating --cwd %s -- %s", vim.fn.shellescape(vim.fn.getcwd()), vim.env.SHELL)
+    elseif #fargs == 1 and fargs[1]:sub(1, 2) ~= "--" then
       -- Check to see if a direction has been passed in. (e.g. :ZellijNewPane down)
       -- we make sure only one opt has been passed, and that the first characters of
       -- it are not '--' (i.e. not a flag for zellij)
-      l_zellij_args = string.format("--close-on-exit --direction %s --cwd %s -- %s", fargs[1], vim.fn.getcwd(), vim.env.SHELL) 
+      l_zellij_args = string.format(
+        "--close-on-exit --direction %s --cwd %s -- %s",
+        fargs[1],
+        vim.fn.shellescape(vim.fn.getcwd()),
+        vim.env.SHELL
+      )
     else
       -- Assuming that if the above is not true, this has been called with flags for
       -- zellij (e.g. :ZellijNewPane --close-on-exit --floating -- htop)
       l_zellij_args = table.concat(fargs, " ")
     end
 
-    sys(
-      "zellij action new-pane "
-      .. l_zellij_args
-    )
+    sys("zellij action new-pane " .. l_zellij_args)
   end
 
   function M.close_pane()
