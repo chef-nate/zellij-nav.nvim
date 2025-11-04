@@ -28,10 +28,6 @@ function M.setup()
     sys("zellij action switch-mode normal")
   end
 
-  function M.new_tab()
-    sys("zellij action new-tab")
-  end
-
   function M.new_pane(opts)
     M.unlock() -- Ensure we are in normal mode
 
@@ -69,8 +65,8 @@ function M.setup()
         vim.env.SHELL
       )
     else
-      -- Assuming that if the above is not true, this has been called with flags for
-      -- zellij (e.g. :ZellijNewPane --close-on-exit --floating -- htop)
+      -- If the above is not true, then this has probably been called with flags for zellij
+      -- (e.g. :ZellijNewPane --close-on-exit --floating -- htop)
       l_zellij_args = table.concat(fargs, " ")
     end
 
@@ -85,6 +81,92 @@ function M.setup()
 
   function M.toggle_floating_panes()
     sys("zellij action toggle-floating-panes")
+  end
+
+  function M.toggle_fullscreen()
+    sys("zellij action toggle-fullscreen")
+  end
+
+  function M.rename_pane(opts)
+    local arg
+    if type(opts) == "table" then
+      arg = opts.args ~= "" and opts.args or nil
+    elseif type(opts) == "string" then
+      arg = opts ~= "" and opts or nil
+    else
+      arg = nil
+    end
+
+    if not arg then
+      arg = vim.fn.input("New Pane Name: ")
+      if arg == "" then
+        vim.notify("No pane name provided - rename cancelled.", vim.log.levels.WARN, { title = "ZellijRenamePane" })
+        return
+      end
+    end
+
+    sys(string.format("zellij action rename-pane -- %q", arg))
+  end
+
+  function M.resize_pane(opts)
+    local arg
+    if type(opts) == "table" then
+      arg = opts.args ~= "" and opts.args or nil
+    elseif type(opts) == "string" then
+      arg = opts ~= "" and opts or nil
+    else
+      arg = nil
+    end
+
+    if arg then
+      sys(string.format("zellij action resize increase %s", arg))
+    else
+      -- No direction provided. Take user input to resize until escape key is pressed
+      -- If user cancells, want to restore prev layout. unfortunatly while 'zellij action dump-layout'
+      -- exists, there is no way to restore the layout to this that i can find. So changes are tracked
+      -- and reverted in the event of a cancel
+      local reverse_changes = {}
+      vim.api.nvim_echo(
+        { { "-- Resize Mode (h/j/k/l to resize, Enter=commit, Esc=cancel) --", "WarningMsg" } },
+        false,
+        {}
+      )
+
+      while true do
+        local key = vim.fn.getchar(-1, { number = false })
+
+        if key == "h" then
+          M.resize_pane("left")
+          table.insert(reverse_changes, "right")
+        elseif key == "j" then
+          M.resize_pane("down")
+          table.insert(reverse_changes, "up")
+        elseif key == "k" then
+          M.resize_pane("up")
+          table.insert(reverse_changes, "down")
+        elseif key == "l" then
+          M.resize_pane("right")
+          table.insert(reverse_changes, "left")
+        elseif key == "\r" then
+          break
+        elseif key == "\x1b" then
+          for i = #reverse_changes, 1, -1 do
+            M.resize_pane(reverse_changes[i])
+          end
+          break
+        else
+          vim.notify(
+            "Valid key not pressed [h/j/k/l] for resize. Please press 'Enter'/'Escape' to save/cancel resize mode",
+            vim.log.levels.INFO,
+            { title = "ZellijResizePane" }
+          )
+        end
+      end
+    end
+  end
+
+  function M.new_tab()
+    sys("zellij action new-tab")
   end
 end
 require("zellij-nav.commands").commands(M)
