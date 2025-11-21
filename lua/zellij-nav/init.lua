@@ -1,5 +1,42 @@
 local M = {}
 
+local function normalize_arg(opts)
+  -- normalize command vs lua call arguments (single/no arg)
+
+  -- command call
+  if type(opts) == "table" then
+    -- distinguish no string vs empty string
+    if opts.args == "" then
+      return nil
+    else
+      return opts.args
+    end
+  end
+
+  -- lua call
+  return opts
+end
+
+local function normalize_fargs(opts)
+  -- normalize command vs lua call arguments (multiple/no arg)
+
+  -- command call
+  if type(opts) == "table" and opts.fargs then
+    return opts.fargs
+
+  -- lua call (multiple args)
+  elseif type(opts) == "table" then
+    return opts
+
+  -- lua call (single arg)
+  elseif opts ~= nil then
+    return { opts }
+  end
+
+  -- no args
+  return {}
+end
+
 function M.setup()
   local nav = require("zellij-nav.utils").zellij_navigate
   local sys = vim.fn.system
@@ -31,46 +68,28 @@ function M.setup()
   function M.new_pane(opts)
     M.unlock() -- Ensure we are in normal mode
 
-    local fargs
-    local l_zellij_args
+    local fargs = normalize_fargs(opts)
 
-    if type(opts) == "table" and opts.fargs then
-      -- called as nvim command
-      -- e.g. :ZellijNewPane down OR :ZellijNewPane --floating -- htop
-      fargs = opts.fargs
-    elseif type(opts) == "string" then
-      -- called directly from lua
-      -- e.g. new_pane("down")
-      fargs = { opts }
-    elseif type(opts) == "table" then
-      -- called directly from lua with table of args
-      -- e.g. new_pane("--floating","-- htop")
-      fargs = opts
-    else
-      fargs = {}
-    end
+    local cwd = vim.fn.shellescape(vim.fn.getcwd())
+    local shell = vim.env.SHELL
 
+    -- if no fargs provided spawn floating pane with default shell
     if #fargs == 0 then
-      -- No args given, spawn floating pane with default shell
-      l_zellij_args =
-        string.format("--close-on-exit --floating --cwd %s -- %s", vim.fn.shellescape(vim.fn.getcwd()), vim.env.SHELL)
-    elseif #fargs == 1 and fargs[1]:sub(1, 2) ~= "--" then
-      -- Check to see if a direction has been passed in. (e.g. :ZellijNewPane down)
-      -- we make sure only one opt has been passed, and that the first characters of
-      -- it are not '--' (i.e. not a flag for zellij)
-      l_zellij_args = string.format(
-        "--close-on-exit --direction %s --cwd %s -- %s",
-        fargs[1],
-        vim.fn.shellescape(vim.fn.getcwd()),
-        vim.env.SHELL
-      )
-    else
-      -- If the above is not true, then this has probably been called with flags for zellij
-      -- (e.g. :ZellijNewPane --close-on-exit --floating -- htop)
-      l_zellij_args = table.concat(fargs, " ")
+      sys(string.format("zellij action new-pane --close-on-exit --floating --cwd %s -- %s", cwd, shell))
+      return
+    elseif #fargs == 1 then
+      -- check if direction provided
+      local valid_dir = { left = true, right = true, up = true, down = true }
+
+      if valid_dir[fargs[1]] then
+        -- direction specified
+        sys(string.format("zellij action new-pane --close-on-exit --direction %s --cwd %s -- %s", fargs[1], cwd, shell))
+        return
+      end
     end
 
-    sys("zellij action new-pane " .. l_zellij_args)
+    -- if havn't returned by now then opts provided
+    sys(string.format("zellij action new-pane %s", table.concat(fargs, " ")))
   end
 
   function M.close_pane()
@@ -83,90 +102,141 @@ function M.setup()
     sys("zellij action toggle-floating-panes")
   end
 
-  function M.toggle_fullscreen()
+  function M.toggle_pane_fullscreen()
     sys("zellij action toggle-fullscreen")
   end
 
   function M.rename_pane(opts)
-    local arg
-    if type(opts) == "table" then
-      arg = opts.args ~= "" and opts.args or nil
-    elseif type(opts) == "string" then
-      arg = opts ~= "" and opts or nil
-    else
-      arg = nil
-    end
+    local arg = normalize_arg(opts)
 
-    if not arg then
-      arg = vim.fn.input("New Pane Name: ")
-      if arg == "" then
-        vim.notify("No pane name provided - rename cancelled.", vim.log.levels.WARN, { title = "ZellijRenamePane" })
+    local function apply_rename(name)
+      -- user cancel
+      if name == nil then
         return
       end
+
+      sys(string.format("zellij action rename-pane -- %q", name))
     end
 
-    sys(string.format("zellij action rename-pane -- %q", arg))
+    if arg ~= nil then
+      apply_rename(arg)
+      return
+    end
+
+    vim.ui.input({ prompt = "New Pane Name: " }, apply_rename)
   end
 
   function M.resize_pane(opts)
-    local arg
-    if type(opts) == "table" then
-      arg = opts.args ~= "" and opts.args or nil
-    elseif type(opts) == "string" then
-      arg = opts ~= "" and opts or nil
-    else
-      arg = nil
-    end
+    local arg = normalize_arg(opts)
 
     if arg then
       sys(string.format("zellij action resize increase %s", arg))
-    else
-      -- No direction provided. Take user input to resize until escape key is pressed
-      -- If user cancells, want to restore prev layout. unfortunatly while 'zellij action dump-layout'
-      -- exists, there is no way to restore the layout to this that i can find. So changes are tracked
-      -- and reverted in the event of a cancel
-      local reverse_changes = {}
-      vim.api.nvim_echo(
-        { { "-- Resize Mode (h/j/k/l to resize, Enter=commit, Esc=cancel) --", "WarningMsg" } },
-        false,
-        {}
-      )
+      return
+    end
+    -- interactive resize mode
+    -- track changes so that if user cancels, original layout can be restored
+    local reverse_changes = {}
+    vim.api.nvim_echo(
+      { { "-- Resize Mode (h/j/k/l to resize, Enter=commit, Esc=cancel) --", "WarningMsg" } },
+      false,
+      {}
+    )
 
-      while true do
-        local key = vim.fn.getchar(-1, { number = false })
+    while true do
+      local key = vim.fn.getchar(-1, { number = false })
 
-        if key == "h" then
-          M.resize_pane("left")
-          table.insert(reverse_changes, "right")
-        elseif key == "j" then
-          M.resize_pane("down")
-          table.insert(reverse_changes, "up")
-        elseif key == "k" then
-          M.resize_pane("up")
-          table.insert(reverse_changes, "down")
-        elseif key == "l" then
-          M.resize_pane("right")
-          table.insert(reverse_changes, "left")
-        elseif key == "\r" then
-          break
-        elseif key == "\x1b" then
-          for i = #reverse_changes, 1, -1 do
-            M.resize_pane(reverse_changes[i])
-          end
-          break
-        else
-          vim.notify(
-            "Valid key not pressed [h/j/k/l] for resize. Please press 'Enter'/'Escape' to save/cancel resize mode",
-            vim.log.levels.INFO,
-            { title = "ZellijResizePane" }
-          )
+      if key == "h" then
+        M.resize_pane("left")
+        table.insert(reverse_changes, "right")
+      elseif key == "j" then
+        M.resize_pane("down")
+        table.insert(reverse_changes, "up")
+      elseif key == "k" then
+        M.resize_pane("up")
+        table.insert(reverse_changes, "down")
+      elseif key == "l" then
+        M.resize_pane("right")
+        table.insert(reverse_changes, "left")
+      elseif key == "\r" then
+        break
+      elseif key == "\x1b" then
+        -- cancelled so reverse changes
+        for i = #reverse_changes, 1, -1 do
+          M.resize_pane(reverse_changes[i])
         end
+        break
+      else
+        vim.notify(
+          "Valid key not pressed [h/j/k/l] for resize. Please press 'Enter'/'Escape' to save/cancel resize mode",
+          vim.log.levels.INFO,
+          { title = "ZellijResizePane" }
+        )
       end
     end
+  end
+
+  function M.move_pane(opts)
+    local arg = normalize_arg(opts)
+
+    -- only accept valid inputs
+    local valid = { left = true, right = true, up = true, down = true }
+
+    if not valid[arg] then
+      vim.notify(
+        string.format("Invalid argument: %s. Must be 'left' or 'right'.", tostring(arg)),
+        vim.log.levels.ERROR,
+        { title = "ZelliijMovePane" }
+      )
+      return
+    end
+
+    sys(string.format("zellij action move-pane %s", arg))
   end
 
   function M.new_tab()
     sys("zellij action new-tab")
+  end
+
+  function M.close_tab()
+    sys("zellij action close-tab")
+  end
+
+  function M.rename_tab(opts)
+    local arg = normalize_arg(opts)
+
+    local function apply_rename(name)
+      -- user cancel
+      if name == nil then
+        return
+      end
+
+      sys(string.format("zellij action rename-tab -- %q", name))
+    end
+
+    if arg ~= nil then
+      apply_rename(arg)
+      return
+    end
+
+    vim.ui.input({ prompt = "New Tab Name: " }, apply_rename)
+  end
+
+  function M.move_tab(opts)
+    local arg = normalize_arg(opts)
+
+    -- only accept valid inputs
+    local valid = { left = true, right = true }
+
+    if not valid[arg] then
+      vim.notify(
+        string.format("Invalid argument: %s. Must be 'left' or 'right'.", tostring(arg)),
+        vim.log.levels.ERROR,
+        { title = "ZelliijMoveTab" }
+      )
+      return
+    end
+
+    sys(string.format("zellij action move-tab %s", arg))
   end
 end
 require("zellij-nav.commands").commands(M)
